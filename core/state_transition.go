@@ -373,37 +373,6 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 				ReturnData: nil,
 			}
 			err = nil
-		// Transactions sequenced by the Espresso Sequencer must be included in the payload; the
-		// sequencer has no discretion to exclude invalid ones. Thus, we treat invalid Espresso
-		// transactions as noops rather than failing the whole block. Unlike failed deposits, these
-		// are true noops -- the caller does not even pay gas; instead, we rely on the cost of
-		// sequencing the transactions via the Espresso Sequencer to prevent spam. The only failure
-		// modes here are consensus errors, like invalid signatures or nonces, or insufficient
-		// balance to pay the intrinsic gas. These are all very cheap to check, so this is not an
-		// effective spam vector, and Espresso block builders are incentivized not to take up
-		// limited block space with noop transactions anyways.
-		// TODO currently, we allow invalid noop transactions unconditionally. To avoid breaking
-		// with upstream OP, we should check if we are building/executing an Espresso block (i.e.
-		// change this `else` to an `else if`). The information we need to check this exists: the
-		// L1 block info encoded in the calldata of the block's first transaction contains a non-nil
-		// `Justification` field if and only if this is an Espresso block. However this info is very
-		// hard to get at, because the data structure is defined in the op-node derivation pipeline,
-		// so we don't have the API to deserialize it at this lower level of abstraction.
-		} else {
-			// Revert changes to thes state.
-			st.state.RevertToSnapshot(snap)
-			// Put the gas back in the gas pool which was taken out of the gas pool to purchase gas
-			// for this transaction. This could be non-zero if the transaction passed the signature
-			// and nonce check and successfully purchased gas, but then failed for some later
-			// reason, like its gas limit being too low for its intrinsic gas or the caller not
-			// having enough ETH for the amount of the transaction.
-			st.gp.AddGas(st.initialGas)
-			result = &ExecutionResult{
-				UsedGas:    0,
-				Err:        fmt.Errorf("detected invalid Espresso tx after purchasing %d gas, using %d gas: %w", st.initialGas, st.gasUsed(), err),
-				ReturnData: nil,
-			}
-			err = nil
 		}
 	}
 	return result, err
