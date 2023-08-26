@@ -42,6 +42,7 @@ type BuildPayloadArgs struct {
 	Withdrawals  types.Withdrawals // The provided withdrawals
 
 	NoTxPool     bool                 // Optimism addition: option to disable tx pool contents from being included
+	Espresso     bool                 // Optimism addition: option to enable Espresso mode
 	Transactions []*types.Transaction // Optimism addition: txs forced into the block via engine API
 	GasLimit     *uint64              // Optimism addition: override gas limit of the block to build
 }
@@ -173,7 +174,7 @@ func (w *worker) buildPayload(args *BuildPayloadArgs) (*Payload, error) {
 	// Build the initial version with no transaction included. It should be fast
 	// enough to run. The empty payload can at least make sure there is something
 	// to deliver for not missing slot.
-	empty, _, err := w.getSealingBlock(args.Parent, args.Timestamp, args.FeeRecipient, args.Random, args.Withdrawals, true, args.Transactions, args.GasLimit)
+	empty, _, err := w.getSealingBlock(args.Parent, args.Timestamp, args.FeeRecipient, args.Random, args.Withdrawals, true, args.Espresso, args.Transactions, args.GasLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +201,7 @@ func (w *worker) buildPayload(args *BuildPayloadArgs) (*Payload, error) {
 			select {
 			case <-timer.C:
 				start := time.Now()
-				block, fees, err := w.getSealingBlock(args.Parent, args.Timestamp, args.FeeRecipient, args.Random, args.Withdrawals, false, args.Transactions, args.GasLimit)
+				block, fees, err := w.getSealingBlock(args.Parent, args.Timestamp, args.FeeRecipient, args.Random, args.Withdrawals, false, false, args.Transactions, args.GasLimit)
 				if err == nil {
 					payload.update(block, fees, time.Since(start))
 				}

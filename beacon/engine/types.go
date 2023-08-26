@@ -41,6 +41,9 @@ type PayloadAttributes struct {
 	// NoTxPool is a field for rollups: if true, the no transactions are taken out of the tx-pool,
 	// only transactions from the above Transactions list will be included.
 	NoTxPool bool `json:"noTxPool,omitempty" gencodec:"optional"`
+	// Espresso indicates whether Espresso mode is enabled. If so, invalid transactions will be
+	// silently rejected, instead of causing the whole block to fail.
+	Espresso bool `json:"espresso,omitempty" gencodec:"optional"`
 	// GasLimit is a field for rollups: if set, this sets the exact gas limit the block produced with.
 	GasLimit *uint64 `json:"gasLimit,omitempty" gencodec:"optional"`
 }
