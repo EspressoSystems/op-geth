@@ -217,7 +217,7 @@ type RejectedTransaction struct {
 	// blobs that were forced into the sequence by end users as rejected transactions.
 	Data []byte
 	// The position in the block at which this tranaction would have appeared had it been valid.
-	Pos int
+	Pos uint64
 }
 
 // "external" block encoding. used for eth protocol, etc.

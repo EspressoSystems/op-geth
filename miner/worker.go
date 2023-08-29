@@ -1159,7 +1159,7 @@ func (w *worker) generateWork(genParams *generateParams) (*types.Block, *big.Int
 			}
 			rejected = append(rejected, types.RejectedTransaction{
 				Data: bytes,
-				Pos:  len(work.receipts),
+				Pos:  uint64(len(work.receipts)),
 			})
 		} else {
 			work.tcount++
