@@ -41,6 +41,9 @@ type PayloadAttributes struct {
 	// NoTxPool is a field for rollups: if true, the no transactions are taken out of the tx-pool,
 	// only transactions from the above Transactions list will be included.
 	NoTxPool bool `json:"noTxPool,omitempty" gencodec:"optional"`
+	// Espresso indicates whether Espresso mode is enabled. If so, invalid transactions will be
+	// silently rejected, instead of causing the whole block to fail.
+	Espresso bool `json:"espresso,omitempty" gencodec:"optional"`
 	// GasLimit is a field for rollups: if set, this sets the exact gas limit the block produced with.
 	GasLimit *uint64 `json:"gasLimit,omitempty" gencodec:"optional"`
 }
@@ -57,21 +60,22 @@ type payloadAttributesMarshaling struct {
 
 // ExecutableData is the data necessary to execute an EL payload.
 type ExecutableData struct {
-	ParentHash    common.Hash         `json:"parentHash"    gencodec:"required"`
-	FeeRecipient  common.Address      `json:"feeRecipient"  gencodec:"required"`
-	StateRoot     common.Hash         `json:"stateRoot"     gencodec:"required"`
-	ReceiptsRoot  common.Hash         `json:"receiptsRoot"  gencodec:"required"`
-	LogsBloom     []byte              `json:"logsBloom"     gencodec:"required"`
-	Random        common.Hash         `json:"prevRandao"    gencodec:"required"`
-	Number        uint64              `json:"blockNumber"   gencodec:"required"`
-	GasLimit      uint64              `json:"gasLimit"      gencodec:"required"`
-	GasUsed       uint64              `json:"gasUsed"       gencodec:"required"`
-	Timestamp     uint64              `json:"timestamp"     gencodec:"required"`
-	ExtraData     []byte              `json:"extraData"     gencodec:"required"`
-	BaseFeePerGas *big.Int            `json:"baseFeePerGas" gencodec:"required"`
-	BlockHash     common.Hash         `json:"blockHash"     gencodec:"required"`
-	Transactions  [][]byte            `json:"transactions"  gencodec:"required"`
-	Withdrawals   []*types.Withdrawal `json:"withdrawals"`
+	ParentHash    common.Hash                 `json:"parentHash"    gencodec:"required"`
+	FeeRecipient  common.Address              `json:"feeRecipient"  gencodec:"required"`
+	StateRoot     common.Hash                 `json:"stateRoot"     gencodec:"required"`
+	ReceiptsRoot  common.Hash                 `json:"receiptsRoot"  gencodec:"required"`
+	LogsBloom     []byte                      `json:"logsBloom"     gencodec:"required"`
+	Random        common.Hash                 `json:"prevRandao"    gencodec:"required"`
+	Number        uint64                      `json:"blockNumber"   gencodec:"required"`
+	GasLimit      uint64                      `json:"gasLimit"      gencodec:"required"`
+	GasUsed       uint64                      `json:"gasUsed"       gencodec:"required"`
+	Timestamp     uint64                      `json:"timestamp"     gencodec:"required"`
+	ExtraData     []byte                      `json:"extraData"     gencodec:"required"`
+	BaseFeePerGas *big.Int                    `json:"baseFeePerGas" gencodec:"required"`
+	BlockHash     common.Hash                 `json:"blockHash"     gencodec:"required"`
+	Transactions  [][]byte                    `json:"transactions"  gencodec:"required"`
+	Withdrawals   []*types.Withdrawal         `json:"withdrawals"`
+	Rejected      []types.RejectedTransaction `json:"rejected" gencodec:"optional"`
 }
 
 // JSON type overrides for executableData.
@@ -211,7 +215,7 @@ func ExecutableDataToBlock(params ExecutableData) (*types.Block, error) {
 		MixDigest:       params.Random,
 		WithdrawalsHash: withdrawalsRoot,
 	}
-	block := types.NewBlockWithHeader(header).WithBody(txs, nil /* uncles */).WithWithdrawals(params.Withdrawals)
+	block := types.NewBlockWithHeader(header).WithBody(txs, nil /* uncles */).WithWithdrawals(params.Withdrawals).WithRejected(params.Rejected)
 	if block.Hash() != params.BlockHash {
 		return nil, fmt.Errorf("blockhash mismatch, want %x, got %x", params.BlockHash, block.Hash())
 	}
@@ -237,6 +241,7 @@ func BlockToExecutableData(block *types.Block, fees *big.Int) *ExecutionPayloadE
 		Random:        block.MixDigest(),
 		ExtraData:     block.Extra(),
 		Withdrawals:   block.Withdrawals(),
+		Rejected:      block.Rejected(),
 	}
 	return &ExecutionPayloadEnvelope{ExecutionPayload: data, BlockValue: fees}
 }

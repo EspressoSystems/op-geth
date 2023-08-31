@@ -1003,6 +1003,7 @@ type generateParams struct {
 	withdrawals types.Withdrawals // List of withdrawals to include in block.
 	noUncle     bool              // Flag whether the uncle block inclusion is allowed
 	noTxs       bool              // Flag whether an empty block without any transaction is expected
+	espresso    bool              // Flag indicating whether Espresso mode is enabled
 
 	txs      types.Transactions // Deposit transactions to include at the start of the block
 	gasLimit *uint64            // Optional gas limit override
@@ -1137,14 +1138,32 @@ func (w *worker) generateWork(genParams *generateParams) (*types.Block, *big.Int
 		work.gasPool = new(core.GasPool).AddGas(work.header.GasLimit)
 	}
 
+	rejected := make([]types.RejectedTransaction, 0)
 	for _, tx := range genParams.txs {
 		from, _ := types.Sender(work.signer, tx)
 		work.state.SetTxContext(tx.Hash(), work.tcount)
 		_, err := w.commitTransaction(work, tx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)
+			if tx.Type() == types.DepositTxType || !genParams.espresso {
+				// We must include deposit transactions, and prior to enabling Espresso mode we must
+				// include _all_ forced transactions.
+				return nil, nil, fmt.Errorf("failed to force-include tx: %s type: %d sender: %s nonce: %d, err: %w", tx.Hash(), tx.Type(), from, tx.Nonce(), err)
+			}
+			// Other forced transactions that are invalid just get added to a list, which the
+			// batcher can use to send them to L1 so that validating nodes can check they were in
+			// fact rejected using their own engine.
+			log.Warn("failed to force-include tx", "hash", tx.Hash(), "type", tx.Type(), "sender", from, "nonce", tx.Nonce(), "err", err)
+			bytes, err := tx.MarshalBinary()
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to serialize rejected tx %v, err: %w", tx, err)
+			}
+			rejected = append(rejected, types.RejectedTransaction{
+				Data: bytes,
+				Pos:  uint64(len(work.receipts)),
+			})
+		} else {
+			work.tcount++
 		}
-		work.tcount++
 	}
 
 	// forced transactions done, fill rest of block with transactions
@@ -1160,7 +1179,7 @@ func (w *worker) generateWork(genParams *generateParams) (*types.Block, *big.Int
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(w.newpayloadTimeout))
 		}
 	}
-	block, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts, genParams.withdrawals)
+	block, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts, genParams.withdrawals, rejected)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1246,7 +1265,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
 		// Withdrawals are set to nil here, because this is only called in PoW.
-		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts, nil)
+		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts, nil, nil)
 		if err != nil {
 			return err
 		}
@@ -1277,7 +1296,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 // getSealingBlock generates the sealing block based on the given parameters.
 // The generation result will be passed back via the given channel no matter
 // the generation itself succeeds or not.
-func (w *worker) getSealingBlock(parent common.Hash, timestamp uint64, coinbase common.Address, random common.Hash, withdrawals types.Withdrawals, noTxs bool, transactions types.Transactions, gasLimit *uint64) (*types.Block, *big.Int, error) {
+func (w *worker) getSealingBlock(parent common.Hash, timestamp uint64, coinbase common.Address, random common.Hash, withdrawals types.Withdrawals, noTxs bool, espresso bool, transactions types.Transactions, gasLimit *uint64) (*types.Block, *big.Int, error) {
 	req := &getWorkReq{
 		params: &generateParams{
 			timestamp:   timestamp,
@@ -1288,6 +1307,7 @@ func (w *worker) getSealingBlock(parent common.Hash, timestamp uint64, coinbase 
 			withdrawals: withdrawals,
 			noUncle:     true,
 			noTxs:       noTxs,
+			espresso:    espresso,
 			txs:         transactions,
 			gasLimit:    gasLimit,
 		},

@@ -178,6 +178,30 @@ type Block struct {
 	transactions Transactions
 	withdrawals  Withdrawals
 
+	// `rejected` is an OP/Espresso extension. It collects transactions which were included by the
+	// OP sequencer in the batch that generated this block, but could not be included in the block
+	// because the failed basic consensus checks -- invalid signature, nonce too low, etc.
+	//
+	// This field is _not_ normative: it is not included in the block hash and is not considered
+	// part of the L2 chain data. Most block explorers will not show it. This means that the L2
+	// chain still has the exact same data structures and format as an L1 EVM chain. The field is
+	// mainly included here for plumbing: it means that when a batch is executed to produce a block,
+	// information is not lost when transactions from the batch are rejected. Thus, when the block
+	// is converted _back_ to a batch by the batcher, the resulting batch which is sent to the L1
+	// will include all the transactions from the original batch, including the invalid ones.
+	//
+	// Validating OP-nodes which read batches from L1 can then check that the sequencer included all
+	// the transactions it was required to include, if the sequencer was obligated by the Espresso
+	// Sequencer to include certain transactions. Those nodes will then _derive_ the resulting block
+	// by sending the batch to their own engine, which will once again filter out the invalid
+	// transactions, rather than trusting the sequencer about which transactions were invalid.
+	//
+	// Effectively, we have removed the exclusion of invalid transactions as a responsibility of the
+	// sequencer and instead pushed this responsibility into the derivation pipeline/fraud proof
+	// mechanism. As a result, we need this extra field to keep track of the extra information --
+	// invalid transactions -- that is a normative part of a batch but not a block.
+	rejected []RejectedTransaction
+
 	// caches
 	hash atomic.Value
 	size atomic.Value
@@ -188,12 +212,21 @@ type Block struct {
 	ReceivedFrom interface{}
 }
 
+type RejectedTransaction struct {
+	// The raw data of the transaction. This allows us to include even completely malformed data
+	// blobs that were forced into the sequence by end users as rejected transactions.
+	Data []byte
+	// The position in the block at which this tranaction would have appeared had it been valid.
+	Pos uint64
+}
+
 // "external" block encoding. used for eth protocol, etc.
 type extblock struct {
 	Header      *Header
 	Txs         []*Transaction
 	Uncles      []*Header
-	Withdrawals []*Withdrawal `rlp:"optional"`
+	Withdrawals []*Withdrawal         `rlp:"optional"`
+	Rejected    []RejectedTransaction `rlp:"optional"`
 }
 
 // NewBlock creates a new block. The input data is copied,
@@ -295,7 +328,7 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 	if err := s.Decode(&eb); err != nil {
 		return err
 	}
-	b.header, b.uncles, b.transactions, b.withdrawals = eb.Header, eb.Uncles, eb.Txs, eb.Withdrawals
+	b.header, b.uncles, b.transactions, b.withdrawals, b.rejected = eb.Header, eb.Uncles, eb.Txs, eb.Withdrawals, eb.Rejected
 	b.size.Store(rlp.ListSize(size))
 	return nil
 }
@@ -307,6 +340,7 @@ func (b *Block) EncodeRLP(w io.Writer) error {
 		Txs:         b.transactions,
 		Uncles:      b.uncles,
 		Withdrawals: b.withdrawals,
+		Rejected:    b.rejected,
 	})
 }
 
@@ -351,6 +385,10 @@ func (b *Block) BaseFee() *big.Int {
 
 func (b *Block) Withdrawals() Withdrawals {
 	return b.withdrawals
+}
+
+func (b *Block) Rejected() []RejectedTransaction {
+	return b.rejected
 }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
@@ -423,6 +461,12 @@ func (b *Block) WithWithdrawals(withdrawals []*Withdrawal) *Block {
 		b.withdrawals = make([]*Withdrawal, len(withdrawals))
 		copy(b.withdrawals, withdrawals)
 	}
+	return b
+}
+
+// WithRejected sets the rejected transactions in a block, does not return a new block.
+func (b *Block) WithRejected(rejected []RejectedTransaction) *Block {
+	b.rejected = rejected
 	return b
 }
 
