@@ -63,6 +63,10 @@
 
             # geth node
             go-ethereum
+          ] ++ lib.optionals stdenv.isDarwin [
+            darwin.libobjc
+            darwin.IOKit
+            darwin.apple_sdk.frameworks.CoreFoundation
           ];
         };
       });
