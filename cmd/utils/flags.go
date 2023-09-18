@@ -857,6 +857,12 @@ var (
 		Value:    ethconfig.Defaults.GPO.IgnorePrice.Int64(),
 		Category: flags.GasPriceCategory,
 	}
+	GpoMinSuggestedPriorityFeeFlag = &cli.Int64Flag{
+		Name:     "gpo.minsuggestedpriorityfee",
+		Usage:    "Minimum transaction priority fee to suggest. Used on OP chains when blocks are not full.",
+		Value:    ethconfig.Defaults.GPO.MinSuggestedPriorityFee.Int64(),
+		Category: flags.GasPriceCategory,
+	}
 
 	// Rollup Flags
 	RollupSequencerHTTPFlag = &cli.StringFlag{
@@ -893,9 +899,9 @@ var (
 		Usage:    "By default the pending block equals the latest block to save resources and not leak txs from the tx-pool, this flag enables computing of the pending block from the tx-pool instead.",
 		Category: flags.RollupCategory,
 	}
-	RollupAllowPendingTxFilters = &cli.BoolFlag{
-		Name:     "rollup.allowpendingtxfilters",
-		Usage:    "By default 'eth_subscribe' with 'NewPendingTransaction' and 'eth_newPendingTransactionFilter' are disabled to prevent leaking txs from the tx-pool.",
+	RollupHaltOnIncompatibleProtocolVersionFlag = &cli.StringFlag{
+		Name:     "beta.rollup.halt",
+		Usage:    "Opt-in option to halt on incompatible protocol version requirements of the given level (major/minor/patch/none), as signaled through the Engine API by the rollup node",
 		Category: flags.RollupCategory,
 	}
 
@@ -1563,6 +1569,9 @@ func setGPO(ctx *cli.Context, cfg *gasprice.Config, light bool) {
 	if ctx.IsSet(GpoIgnoreGasPriceFlag.Name) {
 		cfg.IgnorePrice = big.NewInt(ctx.Int64(GpoIgnoreGasPriceFlag.Name))
 	}
+	if ctx.IsSet(GpoMinSuggestedPriorityFeeFlag.Name) {
+		cfg.MinSuggestedPriorityFee = big.NewInt(ctx.Int64(GpoMinSuggestedPriorityFeeFlag.Name))
+	}
 }
 
 func setTxPool(ctx *cli.Context, cfg *txpool.Config) {
@@ -1844,7 +1853,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	}
 	cfg.RollupDisableTxPoolGossip = ctx.Bool(RollupDisableTxPoolGossipFlag.Name)
 	cfg.RollupDisableTxPoolAdmission = cfg.RollupSequencerHTTP != "" && !ctx.Bool(RollupEnableTxPoolAdmissionFlag.Name)
-	cfg.RollupAllowPendingTxFilters = ctx.Bool(RollupAllowPendingTxFilters.Name)
+	cfg.RollupHaltOnIncompatibleProtocolVersion = ctx.String(RollupHaltOnIncompatibleProtocolVersionFlag.Name)
 	// Override any default configs for hard coded networks.
 	switch {
 	case ctx.Bool(MainnetFlag.Name):
@@ -2037,8 +2046,7 @@ func RegisterGraphQLService(stack *node.Node, backend ethapi.Backend, filterSyst
 func RegisterFilterAPI(stack *node.Node, backend ethapi.Backend, ethcfg *ethconfig.Config) *filters.FilterSystem {
 	isLightClient := ethcfg.SyncMode == downloader.LightSync
 	filterSystem := filters.NewFilterSystem(backend, filters.Config{
-		LogCacheSize:    ethcfg.FilterLogCacheSize,
-		AllowPendingTxs: ethcfg.RollupAllowPendingTxFilters,
+		LogCacheSize: ethcfg.FilterLogCacheSize,
 	})
 	stack.RegisterAPIs([]rpc.API{{
 		Namespace: "eth",
