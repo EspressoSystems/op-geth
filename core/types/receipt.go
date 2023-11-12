@@ -570,12 +570,12 @@ func (rs Receipts) DeriveFields(config *params.ChainConfig, hash common.Hash, nu
 		}
 	}
 	if config.Optimism != nil && len(txs) >= 2 { // need at least an info tx and a non-info tx
-		if data := txs[0].Data(); len(data) >= 4+32*8 { // function selector + 8 arguments to setL1BlockValues
-			l1Basefee := new(big.Int).SetBytes(data[4+32*2 : 4+32*3]) // arg index 2
-			overhead := new(big.Int).SetBytes(data[4+32*6 : 4+32*7])  // arg index 6
-			scalar := new(big.Int).SetBytes(data[4+32*7 : 4+32*8])    // arg index 7
-			fscalar := new(big.Float).SetInt(scalar)                  // legacy: format fee scalar as big Float
-			fdivisor := new(big.Float).SetUint64(1_000_000)           // 10**6, i.e. 6 decimals
+		if data := txs[0].Data(); len(data) >= 4+32+32*11 { // function selector + dynamic args offset + 11 arguments to setL1BlockValues
+			l1Basefee := new(big.Int).SetBytes(data[36+32*2 : 36+32*3]) // arg index 2
+			overhead := new(big.Int).SetBytes(data[36+32*6 : 36+32*7])  // arg index 6
+			scalar := new(big.Int).SetBytes(data[36+32*7 : 36+32*8])    // arg index 7
+			fscalar := new(big.Float).SetInt(scalar)                    // legacy: format fee scalar as big Float
+			fdivisor := new(big.Float).SetUint64(1_000_000)             // 10**6, i.e. 6 decimals
 			feeScalar := new(big.Float).Quo(fscalar, fdivisor)
 			for i := 0; i < len(rs); i++ {
 				if !txs[i].IsDepositTx() {
