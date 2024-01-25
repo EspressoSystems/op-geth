@@ -259,6 +259,7 @@ type ChainOverrides struct {
 	// optimism
 	OverrideOptimismCanyon  *uint64
 	ApplySuperchainUpgrades bool
+	OverrideOptimismInterop *uint64
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -318,6 +319,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 					config.Optimism.EIP1559DenominatorCanyon = 250
 				}
 			}
+			if overrides != nil && overrides.OverrideOptimismInterop != nil {
+				config.InteropTime = overrides.OverrideOptimismInterop
+			}
 		}
 	}
 	// Just commit the new block if there is no stored genesis block.
@@ -329,11 +333,11 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		} else {
 			log.Info("Writing custom genesis block")
 		}
+		applyOverrides(genesis.Config)
 		block, err := genesis.Commit(db, triedb)
 		if err != nil {
 			return genesis.Config, common.Hash{}, err
 		}
-		applyOverrides(genesis.Config)
 		return genesis.Config, block.Hash(), nil
 	}
 	// The genesis block is present(perhaps in ancient database) while the
@@ -345,6 +349,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
 		}
+		applyOverrides(genesis.Config)
 		// Ensure the stored genesis matches with the given one.
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
@@ -354,11 +359,11 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		if err != nil {
 			return genesis.Config, hash, err
 		}
-		applyOverrides(genesis.Config)
 		return genesis.Config, block.Hash(), nil
 	}
 	// Check whether the genesis block is already written.
 	if genesis != nil {
+		applyOverrides(genesis.Config)
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}

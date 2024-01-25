@@ -10,13 +10,13 @@
 
   outputs = { self, flake-utils, nixpkgs, foundry, ... }:
     let
-      goVersion = 19; # Change this to update the whole stack
+      goVersion = 21; # Change this to update the whole stack
       overlays = [
         (final: prev: {
           go = prev."go_1_${toString goVersion}";
           # Overlaying nodejs here to ensure nodePackages use the desired
           # version of nodejs.
-          nodejs = prev.nodejs-16_x;
+          nodejs = prev.nodejs_20;
           pnpm = prev.nodePackages.pnpm;
           yarn = prev.nodePackages.yarn;
         })
@@ -27,9 +27,6 @@
       let
         pkgs = import nixpkgs {
           inherit overlays system;
-          config = {
-            permittedInsecurePackages = [ "nodejs-16.20.1" ];
-          };
         };
       in
       {

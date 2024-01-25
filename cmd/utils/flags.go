@@ -264,7 +264,17 @@ var (
 	}
 	OverrideOptimismCanyon = &flags.BigFlag{
 		Name:     "override.canyon",
-		Usage:    "Manually specify the Optimsim Canyon fork timestamp, overriding the bundled setting",
+		Usage:    "Manually specify the Optimism Canyon fork timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
+	OverrideOptimismEcotone = &flags.BigFlag{
+		Name:     "override.ecotone",
+		Usage:    "Manually specify the Optimism Ecotone fork timestamp, overriding the bundled setting",
+		Category: flags.EthCategory,
+	}
+	OverrideOptimismInterop = &cli.Uint64Flag{
+		Name:     "override.interop",
+		Usage:    "Manually specify the Optimsim Interop feature-set fork timestamp, overriding the bundled setting",
 		Category: flags.EthCategory,
 	}
 	SyncModeFlag = &flags.TextMarshalerFlag{
@@ -920,6 +930,7 @@ var (
 		Aliases:  []string{"beta.rollup.superchain-upgrades"},
 		Usage:    "Apply superchain-registry config changes to the local chain-configuration",
 		Category: flags.RollupCategory,
+		Value:    true,
 	}
 
 	// Metrics flags
@@ -2151,12 +2162,11 @@ func SplitTagsFlag(tagsFlag string) map[string]string {
 	return tagsMap
 }
 
-// MakeChainDatabase open an LevelDB using the flags passed to the client and will hard crash if it fails.
+// MakeChainDatabase opens a database using the flags passed to the client and will hard crash if it fails.
 func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.Database {
 	var (
 		cache   = ctx.Int(CacheFlag.Name) * ctx.Int(CacheDatabaseFlag.Name) / 100
 		handles = MakeDatabaseHandles(ctx.Int(FDLimitFlag.Name))
-
 		err     error
 		chainDb ethdb.Database
 	)
